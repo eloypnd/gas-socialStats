@@ -1,19 +1,45 @@
 var Archive = (function () {
   // >>>> PRIVATE PROPERTIES <<<<
   var _spreadsheet = SpreadsheetApp.getActive();
-  var _followersSheet = _spreadsheet.getSheetByName("followers");
-  var _followingSheet = _spreadsheet.getSheetByName("following");
-  var _logSheet = _spreadsheet.getSheetByName("logs");
 
-  var _followers = [];
-  var _followers_id = [];
+  var _sheets = {};
+  var _data = {};
+  var _indexes = {};
+
+  var _sheetsDesc = {
+    followers: {
+      name: 'followers',
+      definition: 'twitterUser',
+      displayName: 'screen_name',
+      index: 'id_str'
+    },
+    following: {
+      name: 'following',
+      definition: 'twitterUser',
+      displayName: 'screen_name',
+      index: 'id_str'
+    },
+    twitterStats: {
+      name: 'twitterStats',
+      definition: 'twitterStats'
+    },
+    logs: {
+      name: 'logs',
+      definition: 'log'
+    }
+  };
 
   var _definitions = {
-    logs: [
+    twitterStats: [
       'created_at',
       'event', // events: follower, unfollower, following, unfollowing
       'user_id',
       'screen_name'
+    ],
+    log: [
+      'created_at',
+      'level', // trace, debug, info, warn, error
+      'message'
     ],
     twitterUser: [
       'id',
@@ -66,62 +92,78 @@ var Archive = (function () {
    * Constructor
    */
   var ArchiveClass = function () {
-    if (!_followersSheet) {
-      Logger.log('ERROR: Missing `followers` sheet');
-      _followersSheet = _createSheet('followers');
-    }
-    if (!_followingSheet) {
-      Logger.log('ERROR: Missing `following` sheet');
-      //TODO: create `following` sheet if it doesn't exits
-    }
-    if (!_logSheet) {
-      Logger.log('ERROR: Missing `logs` sheet');
-      //TODO: create `logs` sheet if it doesn't exits
-    }
+    Object.keys(_sheetsDesc).forEach(function (sheetName) {
+      _sheets[sheetName] = _spreadsheet.getSheetByName(sheetName);
+      if (!_sheets[sheetName]) {
+        Logger.log('INFO: Sheet `%s` doesn\'t exist. Creating new sheet', sheetName);
+        _sheets[sheetName] = _createSheet(sheetName);
+      }
+    });
   };
   /**
-   * `getFollowers()` function load the users from the spreadsheet into the `_followers` property
+   * `get()` function load the sheet and return a JSON object
+   *
+   * @param String sheetName
    *
    * @return void
    */
-  ArchiveClass.prototype.getFollowers = function () {
-    var range = _followersSheet.getDataRange();
+  ArchiveClass.prototype.get = function (sheetName) {
+    if (typeof sheetName === 'undefined') return false;
+    if (typeof _sheetsDesc[sheetName] === 'undefined') return false;
+    var definition = _definitions[_sheetsDesc[sheetName].definition];
+    var range = _sheets[sheetName].getDataRange();
     var data = range.getValues();
-    var id_index = _definitions['twitterUser'].indexOf('id');
 
-    if (_followers.length === 0) {
+    if (!_data[sheetName]) {
+      var index = (_sheetsDesc[sheetName].index) ?
+                    definition.indexOf(_sheetsDesc[sheetName].index)
+                  : undefined;
+      _data[sheetName] = [];
+      _indexes[sheetName] = (index) ? [] : undefined;
       for (var i = 1; i < data.length; i++) {
-        _followers.push(_userSheetToJson(data[i], i+1));
-        _followers_id.push(data[i][id_index].toString());
+        _data[sheetName].push(_sheetToJson(data[i], definition));
+        if (index) { _indexes[sheetName].push(data[i][index].toString()); }
       }
     }
-    return _followers;
+    return _data[sheetName];
   };
-  ArchiveClass.prototype.setFollowers = function (followers) {
-    if (typeof followers === 'undefined') return false;
+  ArchiveClass.prototype.set = function (sheetName, data) {
+    if (typeof sheetName === 'undefined') return false;
+    if (typeof _sheetsDesc[sheetName] === 'undefined') return false;
+    if (typeof data === 'undefined') return false;
+    var definition = _definitions[_sheetsDesc[sheetName].definition];
 
-    for (var i = 0; i < followers.length; i++) {
-      _followersSheet.appendRow(_userJsonToSheet(followers[i]));
+    //TODO: validate data with sheet definition
+    for (var i = 0; i < _data[sheetName].length; i++) {
+      _sheets[sheetName].appendRow(_jsonToSheet(data[i], definition));
     }
   };
-  ArchiveClass.prototype.mergeFollowers = function (followers) {
-    if (typeof followers === 'undefined') return false;
-    var _followers_copy = JSON.parse(JSON.stringify(_followers));
+  /**
+   * `ArchiveClass.prototype.merge()`
+   *
+   * @param String sheetName
+   * @param Array data
+   *
+   * @return void
+   */
+  ArchiveClass.prototype.merge = function (sheetName, data) {
+    if (typeof sheetName === 'undefined') return false;
+    if (typeof data === 'undefined') return false;
+    if (typeof _indexes[sheetName] === 'undefined') return false;
+    var data_copy = JSON.parse(JSON.stringify(_indexes[sheetName]));
 
-    followers.forEach(function (user, index) {
-      var is_user = _followers_id.indexOf(user.id_str);
-      if (is_user === -1) {
-        _followers.push(user);
-        _log('new follower', user.screen_name);
+    data.forEach(function (row, key) {
+      var index = _indexes[sheetName].indexOf(row[_sheetsDesc[sheetName].index]);
+      if (index === -1) {
+        _data[sheetName].push(row);
+        _log('add ' + sheetName, row[_sheetsDesc[sheetName].displayName]);
       } else {
-        delete _followers_copy[index];
+        delete data_copy[index];
       }
     });
-    _followers_copy.forEach(function (unfollower, index) {
-      Logger.log('@%s is not following you anymore', unfollower.screen_name);
-      delete _followers[index];
-      _log('unfollower', unfollower.screen_name);
-      //_followers.splice(index, 1);
+    data_copy.forEach(function (rowToDelete, key) {
+      _log('delete ' + sheetName, _data[sheetName][key][_sheetsDesc[sheetName].displayName]);
+      delete _data[sheetName][key];
     });
   };
 
@@ -135,10 +177,10 @@ var Archive = (function () {
    *
    * @return Sheet
    */
-  function _createSheet(name, headers) {
-    if ((typeof name !== 'string') || (!headers instanceof Array)) return false;
+  function _createSheet(name) {
+    if (typeof name !== 'string') return false;
 
-    var tmp_sheet = _spreadsheet.insertSheet(name).appendRow(_definitions['twitterUser'])
+    var tmp_sheet = _spreadsheet.insertSheet(name).appendRow(_definitions[_sheetsDesc[name].definition])
     tmp_sheet.setFrozenRows(1);
     return tmp_sheet;
   }
@@ -176,41 +218,45 @@ var Archive = (function () {
     return sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).setValues([values]);
   }
   /**
-   * `_userSheetToJson()` function gets a row from the spreadsheet and transform
+   * `_jsonToSheet()` function gets a row from the spreadsheet and transform
    * it into a JSON object
    *
-   * @param Array user
+   * @param Array data
+   * @param Array definition
    *
    * @return Object
    */
-  function _userSheetToJson(user, sheet_index) {
-    if (typeof user === 'undefined') return false;
-    var tmp_user = {sheet_index: sheet_index};
-    if (user.length !== _definitions['twitterUser'].length) {
-      Logger.log('ERROR in `Archive._userSheetToJson()`: user need to has %s fields but it only has %s',
-        user.length, _definitions['twitterUser'].length);
-    }
-    _definitions['twitterUser'].forEach(function (elem, index, array) {
-      tmp_user[elem] = user[index].toString();
+  function _jsonToSheet(data, definition) {
+    if (typeof data === 'undefined') return false;
+    if (typeof definition === 'undefined') return false;
+
+    //TODO: validate data with definition
+    return definition.map(function (field, index) {
+      return data[field];
     });
-    return tmp_user;
   };
   /**
-   * `_userJsonToSheet()` function gets a row from the spreadsheet and transform
+   * `_sheetToJson()` function gets a row from the spreadsheet and transform
    * it into a JSON object
    *
-   * @param Array user
+   * @param Array data
+   * @param Array definition
    *
    * @return Object
    */
-  function _userJsonToSheet(user) {
-    if (typeof user === 'undefined') return false;
-    var tmp_user = [];
-    //TODO: validate user object we get as an argument
-    _definitions['twitterUser'].forEach(function (elem, index, array) {
-      tmp_user.push(user[elem]);
+  function _sheetToJson(data, definition) {
+    if (typeof data === 'undefined') return false;
+    if (typeof definition === 'undefined') return false;
+    var tmp = {};
+    if (data.length !== definition.length) {
+      Logger.log('ERROR in `Archive._sheetToJson()`: row need to has %s fields but it only has %s',
+        data.length, definition.length);
+      return false;
+    }
+    definition.forEach(function (field, index) {
+      tmp[field] = data[index].toString();
     });
-    return tmp_user;
+    return tmp;
   };
   function _refreshIds() {
     _followers_id = _followers.map(function (user, index) {
