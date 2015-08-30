@@ -1,6 +1,5 @@
 function init() {
-  var twitter = new Twitter();
-  var archive = new Archive();
+  var app = new App();
 
-  archive.setFollowers(twitter.getFollowers());
+  app.followers();
 }
