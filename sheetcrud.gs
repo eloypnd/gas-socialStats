@@ -1,4 +1,4 @@
-var Archive = (function () {
+var SheetCrud = (function () {
   // >>>> PRIVATE PROPERTIES <<<<
   var _spreadsheet = SpreadsheetApp.getActive();
 
@@ -6,93 +6,26 @@ var Archive = (function () {
   var _data = {};
   var _indexes = {};
 
-  var _sheetsDesc = {
-    followers: {
-      name: 'followers',
-      definition: 'twitterUser',
-      displayName: 'screen_name',
-      index: 'id_str'
-    },
-    following: {
-      name: 'following',
-      definition: 'twitterUser',
-      displayName: 'screen_name',
-      index: 'id_str'
-    },
-    twitterStats: {
-      name: 'twitterStats',
-      definition: 'twitterStats'
-    },
-    logs: {
-      name: 'logs',
-      definition: 'log'
-    }
-  };
-
-  var _definitions = {
-    twitterStats: [
-      'created_at',
-      'event', // events: follower, unfollower, following, unfollowing
-      'user_id',
-      'screen_name'
-    ],
-    log: [
-      'created_at',
-      'level', // trace, debug, info, warn, error
-      'message'
-    ],
-    twitterUser: [
-      'id',
-      'id_str',
-      'name',
-      'screen_name',
-      'location',
-      'profile_location',
-      'description',
-      'url',
-      'protected',
-      'followers_count',
-      'friends_count',
-      'listed_count',
-      'created_at',
-      'favourites_count',
-      'utc_offset',
-      'time_zone',
-      'geo_enabled',
-      'verified',
-      'statuses_count',
-      'lang',
-      'contributors_enabled',
-      'is_translator',
-      'is_translation_enabled',
-      'profile_background_color',
-      'profile_background_image_url',
-      'profile_background_image_url_https',
-      'profile_background_tile',
-      'profile_image_url',
-      'profile_image_url_https',
-      'profile_link_color',
-      'profile_sidebar_border_color',
-      'profile_sidebar_fill_color',
-      'profile_text_color',
-      'profile_use_background_image',
-      'has_extended_profile',
-      'default_profile',
-      'default_profile_image',
-      'following',
-      'follow_request_sent',
-      'notifications',
-      'muting',
-      'blocking',
-      'blocked_by'
-    ]
-  };
+  var _meta = {};
 
   /**
    * Constructor
    */
-  var ArchiveClass = function () {
-    Object.keys(_sheetsDesc).forEach(function (sheetName) {
+  var SheetCrudClass = function (meta) {
+    if (typeof meta === 'undefined') {
+      _log('error', 'Missing sheets descriptions and definitions when initialising SheetCRUD');
+      return false;
+    }
+    if (typeof meta.descriptions === 'undefined') {
+      _log('error', 'Missing sheets descriptions when initialising SheetCRUD');
+      return false;
+    }
+    if (typeof meta.definitions === 'undefined') {
+      _log('error', 'Missing sheets definitions when initialising SheetCRUD');
+      return false;
+    }
+    _meta = meta;
+    Object.keys(_meta.descriptions).forEach(function (sheetName) {
       _sheets[sheetName] = _spreadsheet.getSheetByName(sheetName);
       if (!_sheets[sheetName]) {
         Logger.log('INFO: Sheet `%s` doesn\'t exist. Creating new sheet', sheetName);
@@ -107,16 +40,16 @@ var Archive = (function () {
    *
    * @return void
    */
-  ArchiveClass.prototype.get = function (sheetName) {
+  SheetCrudClass.prototype.get = function (sheetName) {
     if (typeof sheetName === 'undefined') return false;
-    if (typeof _sheetsDesc[sheetName] === 'undefined') return false;
-    var definition = _definitions[_sheetsDesc[sheetName].definition];
+    if (typeof _meta.descriptions[sheetName] === 'undefined') return false;
+    var definition = _meta.definitions[_meta.descriptions[sheetName].definition];
     var range = _sheets[sheetName].getDataRange();
     var data = range.getValues();
 
     if (!_data[sheetName]) {
-      var index = (_sheetsDesc[sheetName].index) ?
-                    definition.indexOf(_sheetsDesc[sheetName].index)
+      var index = (_meta.descriptions[sheetName].index) ?
+                    definition.indexOf(_meta.descriptions[sheetName].index)
                   : undefined;
       _data[sheetName] = [];
       _indexes[sheetName] = (index) ? [] : undefined;
@@ -127,11 +60,12 @@ var Archive = (function () {
     }
     return _data[sheetName];
   };
-  ArchiveClass.prototype.set = function (sheetName, data) {
+  SheetCrudClass.prototype.set = function (sheetName, data) {
     if (typeof sheetName === 'undefined') return false;
-    if (typeof _sheetsDesc[sheetName] === 'undefined') return false;
+    if (typeof _meta.descriptions[sheetName] === 'undefined') return false;
     if (typeof data === 'undefined') return false;
-    var definition = _definitions[_sheetsDesc[sheetName].definition];
+    var definition = _meta.definitions[_meta.descriptions[sheetName].definition];
+    _sheets[sheetName].getDataRange().clearContent();
 
     //TODO: validate data with sheet definition
     for (var i = 0; i < _data[sheetName].length; i++) {
@@ -139,30 +73,30 @@ var Archive = (function () {
     }
   };
   /**
-   * `ArchiveClass.prototype.merge()`
+   * `SheetCrudClass.prototype.merge()`
    *
    * @param String sheetName
    * @param Array data
    *
    * @return void
    */
-  ArchiveClass.prototype.merge = function (sheetName, data) {
+  SheetCrudClass.prototype.merge = function (sheetName, data) {
     if (typeof sheetName === 'undefined') return false;
     if (typeof data === 'undefined') return false;
     if (typeof _indexes[sheetName] === 'undefined') return false;
     var data_copy = JSON.parse(JSON.stringify(_indexes[sheetName]));
 
     data.forEach(function (row, key) {
-      var index = _indexes[sheetName].indexOf(row[_sheetsDesc[sheetName].index]);
+      var index = _indexes[sheetName].indexOf(row[_meta.descriptions[sheetName].index]);
       if (index === -1) {
         _data[sheetName].push(row);
-        _log('add ' + sheetName, row[_sheetsDesc[sheetName].displayName]);
+        _log('add ' + sheetName, row[_meta.descriptions[sheetName].displayName]);
       } else {
         delete data_copy[index];
       }
     });
     data_copy.forEach(function (rowToDelete, key) {
-      _log('delete ' + sheetName, _data[sheetName][key][_sheetsDesc[sheetName].displayName]);
+      _log('delete ' + sheetName, _data[sheetName][key][_meta.descriptions[sheetName].displayName]);
       delete _data[sheetName][key];
     });
   };
@@ -180,7 +114,7 @@ var Archive = (function () {
   function _createSheet(name) {
     if (typeof name !== 'string') return false;
 
-    var tmp_sheet = _spreadsheet.insertSheet(name).appendRow(_definitions[_sheetsDesc[name].definition])
+    var tmp_sheet = _spreadsheet.insertSheet(name).appendRow(_meta.definitions[_meta.descriptions[name].definition])
     tmp_sheet.setFrozenRows(1);
     return tmp_sheet;
   }
@@ -211,7 +145,7 @@ var Archive = (function () {
         (typeof sheet === 'undefined') ||
         (!values instanceof Array)) return false;
     if (values.length !== sheet.getLastColumn()) {
-      Logger.log('ERROR in `Archive._setRow()`: Sheet %s has %s columns while new row has %s columns',
+      Logger.log('ERROR in `SheetCrud._setRow()`: Sheet %s has %s columns while new row has %s columns',
         sheet.getName(), sheet.getLastColumn(), values.length);
       return false;
     }
@@ -249,7 +183,7 @@ var Archive = (function () {
     if (typeof definition === 'undefined') return false;
     var tmp = {};
     if (data.length !== definition.length) {
-      Logger.log('ERROR in `Archive._sheetToJson()`: row need to has %s fields but it only has %s',
+      Logger.log('ERROR in `SheetCrud._sheetToJson()`: row need to has %s fields but it only has %s',
         data.length, definition.length);
       return false;
     }
@@ -269,5 +203,5 @@ var Archive = (function () {
     }
   }
 
-  return ArchiveClass;
+  return SheetCrudClass;
 })();
