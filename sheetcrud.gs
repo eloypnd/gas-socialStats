@@ -60,16 +60,26 @@ var SheetCrud = (function () {
     }
     return _data[sheetName];
   };
-  SheetCrudClass.prototype.set = function (sheetName, data) {
+  /**
+   * `SheetCrudClass.prototype.save()`
+   *
+   * @param String sheetName
+   * @param Array data
+   *
+   * @return void
+   */
+  SheetCrudClass.prototype.save = function (sheetName) {
     if (typeof sheetName === 'undefined') return false;
     if (typeof _meta.descriptions[sheetName] === 'undefined') return false;
-    if (typeof data === 'undefined') return false;
     var definition = _meta.definitions[_meta.descriptions[sheetName].definition];
     _sheets[sheetName].getDataRange().clearContent();
+    _sheets[sheetName].appendRow(definition);
 
-    //TODO: validate data with sheet definition
+    //TODO: validate _data[sheetName] with sheet definition
     for (var i = 0; i < _data[sheetName].length; i++) {
-      _sheets[sheetName].appendRow(_jsonToSheet(data[i], definition));
+      if (_data[sheetName][i]) {
+        _sheets[sheetName].appendRow(_jsonToSheet(_data[sheetName][i], definition));
+      }
     }
   };
   /**
@@ -202,9 +212,10 @@ var SheetCrud = (function () {
     });
   }
   function _log() {
-    for (var i = 0; i < arguments.length; i++) {
-      Logger.log('%s: %s', i.toString(), arguments[i]);
-    }
+    //TODO: create independent log module
+    //for (var i = 0; i < arguments.length; i++) {
+    //  Logger.log('%s: %s', i.toString(), arguments[i]);
+    //}
   }
 
   return SheetCrudClass;
