@@ -77,10 +77,11 @@ var SheetCrud = (function () {
    *
    * @param String sheetName
    * @param Array data
+   * @param Function cb('add|remove', row)
    *
    * @return void
    */
-  SheetCrudClass.prototype.merge = function (sheetName, data) {
+  SheetCrudClass.prototype.merge = function (sheetName, data, cb) {
     if (typeof sheetName === 'undefined') return false;
     if (typeof data === 'undefined') return false;
     if (typeof _indexes[sheetName] === 'undefined') return false;
@@ -91,13 +92,16 @@ var SheetCrud = (function () {
       if (index === -1) {
         _data[sheetName].push(row);
         _log('add ' + sheetName, row[_meta.descriptions[sheetName].displayName]);
+        if (typeof cb === 'function') cb('add', row);
       } else {
         delete data_copy[index];
       }
     });
     data_copy.forEach(function (rowToDelete, key) {
-      _log('delete ' + sheetName, _data[sheetName][key][_meta.descriptions[sheetName].displayName]);
+      var row = _data[sheetName][key];
+      _log('delete ' + sheetName, row[_meta.descriptions[sheetName].displayName]);
       delete _data[sheetName][key];
+      if (typeof cb === 'function') cb('remove', row);
     });
   };
 
