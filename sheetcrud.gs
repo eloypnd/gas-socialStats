@@ -83,6 +83,24 @@ var SheetCrud = (function () {
     }
   };
   /**
+   * `SheetCrudClass.prototype.append()`. Append row to the given spreadsheet
+   *
+   * @param String sheetName
+   * @param Array data
+   *
+   * @return void
+   */
+  SheetCrudClass.prototype.append = function (sheetName, row) {
+    if (typeof sheetName === 'undefined') return false;
+    if (typeof row === 'undefined') return false;
+    if (typeof _meta.descriptions[sheetName] === 'undefined') return false;
+    var definition = _meta.definitions[_meta.descriptions[sheetName].definition];
+
+    //TODO: validate row with sheet definition
+    _sheets[sheetName].appendRow(_jsonToSheet(row, definition));
+
+  };
+  /**
    * `SheetCrudClass.prototype.merge()`
    *
    * @param String sheetName
