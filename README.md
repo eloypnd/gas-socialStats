@@ -1,4 +1,4 @@
-#Google App Script Social Stats
+# Google App Script Social Stats
 
 Script that uses Google Sheets to keep track of twitter followers/unfollowers.
 
